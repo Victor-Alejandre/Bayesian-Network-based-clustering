@@ -1,0 +1,267 @@
+import pandas as pd
+import plotly
+import pickle
+import pybnesian as pb
+import numpy as np
+import math
+import sklearn
+import pybnesianCPT_to_df
+from operator import itemgetter
+from radar_chart_discrete import ComplexRadar
+import math
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib
+from statistics import mean
+import itertools
+import networkx as nx
+import matplotlib.pyplot as plt
+from collections import Counter
+import numpy
+from sklearn import preprocessing
+from pybnesianCPT_to_df import from_CPT_to_df
+
+
+
+
+
+def joint_sampling(red,cluster_names,n=100000):  #esta funcion realiza un sampling de la Red Bayesiana de forma que obtenemos una muestra de la distribución conjunta de tamaño n
+    ancestral_order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
+    samples = pd.DataFrame(columns=ancestral_order) #creamos el dataframe donde vamos a guardar los samples
+    for i in range(n):
+        evidence = {}
+        for node in ancestral_order:
+            if node == 'cluster': #sampleamos de la variable cluster
+                evidence[node] = numpy.random.choice(cluster_names, 1,
+                                                     p=from_CPT_to_df(str(red.cpd('cluster'))).iloc[0].tolist())[0]
+
+            else: #sampleamos cada variable dado el valor obtenido de sus padres, de ahí el uso de ancestral order
+                prob = from_CPT_to_df(str(red.cpd(node)))
+                for element in red.parents(node): #vamos reduciendo el dataframe hasta obtener una única fila que contendra P(X| Pa(X))
+                    prob=prob.loc[prob[element]==itemgetter(element)(evidence)]
+                    prob=prob.drop(element,axis=1)
+                cat = prob.columns #definimos las posibles categorías que toma la variable
+                prob=prob.iloc[0].tolist()
+                prob=[float(x) for x in prob]
+                t=sum(prob) #normalizamos las probabilidades debido a que Pybnesian puede devolver probabildiades que suman un valor muy cercano a uno pero no uno y esto da error
+                evidence[node] = numpy.random.choice(cat, 1,
+                                                     p=[x/t for x in prob])[0] #sampleamos el valor de la variable dada las probabilidades
+        x = pd.DataFrame(evidence, index=[0])
+        samples = pd.concat([samples, x]) #añadimos el sample al dataframe
+    return samples
+
+def get_MAP(red,clusters_names,n=200000): #Esta función nos devuelve el map dado cada cluster, es decir, el representante de cada cluster. La inferencia se realiza
+    #mediante probabilistic logic sampling. Para ello se toma una muestra de la distribución conjunta (joint_sampling) y nos quedamos con los samples que necesitamos.
+    MAP = pd.DataFrame()
+    sample=joint_sampling(red,clusters_names,n) #obtenemos una muestra de la distribución conjunta
+
+    variables = pb.Dag(red.nodes(), red.arcs()).topological_sort()
+    variables.remove('cluster')
+    for k in range(len(clusters_names)): #para cada cluster obtenemos el MAP
+        sample_c=sample.loc[sample['cluster']==clusters_names[k]] #nos quedamos con los samples cuyo valor es el del cluster de estudio
+        sample_c=sample_c.drop('cluster',axis=1)
+        dict=sample_c.value_counts().to_dict()
+        map=list(max(dict, key=dict.get)) #obtenemos el MAP
+        for i in range(len(variables)): #Calculamos la probabilidad para cada variable de P(valor MAP variable | C) que será mostrado en el radar chart
+            var=variables[i]
+            p=sample_c.loc[sample_c[var]==map[i]][var].tolist().count(map[i])/sample_c.shape[0]
+            map[i]=(map[i],p)
+        print(map)
+        MAP[clusters_names[k]] = map
+
+    MAP = MAP.set_index(np.array(variables))
+    print(MAP)
+
+    plot = MAP.T
+    return plot
+
+
+
+
+def naming(dataframe_map, importance,red): #Esta función nos devuelve el Radar Chart con los representantes de cada cluster, su importancia y las probabilidades condicionadas de cada
+    #valor del representante dado el cluster
+    bounds = []
+    for var in dataframe_map.columns:
+        bounds.append([0, 1])
+    min_max_per_variable = pd.DataFrame(bounds, columns=['min', 'max'])
+    variables = dataframe_map.columns
+    ranges = list(min_max_per_variable.itertuples(index=False, name=None))
+
+    fig1 = plt.figure(figsize=(10, 10))
+    radar = ComplexRadar(fig1, variables, ranges, show_scales=True)
+
+
+    for g in dataframe_map.index:
+        info = f"cluster {g}"
+        for var in importance[g].keys():
+            info = info + f"\n {var, dataframe_map.loc[g][var][0]} importance {round(importance[g][var],4)}"
+        radar.plot(dataframe_map.loc[g].values, label=info, )
+        radar.fill(dataframe_map.loc[g].values, alpha=0.5)
+
+    radar.set_title("MAP representative of each cluster")
+    # radar.use_legend(loc='lower left', bbox_to_anchor=(0, -0.55,1,0.75),ncol=radar.plot_counter)
+    radar.use_legend(loc='lower left', bbox_to_anchor=(0.3, 0, 1, 1), ncol=radar.plot_counter,
+                     bbox_transform=matplotlib.transforms.IdentityTransform())
+
+
+    plt.show()
+
+
+
+
+def posterior_probability(red, clusters_names, df_categories, point):  # Esta función nos devuelve P(C| x). Point debe ir en orden ancestral
+    lklh = []
+    ancestral_order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
+    ancestral_order.remove('cluster')
+
+    for p_c in clusters_names: #para cada cluster obtenemos P(c,x). Como P(c|x)=P(c,x)/P(x) y C es categórica simplemente necesitamos obtener P(c,x) y normalizar
+        #para obtener la distribución a posteriori
+
+        instance = pd.DataFrame(columns=ancestral_order)
+        i = 0
+        for column in instance.columns:
+            instance[column] = pd.Series(pd.Categorical([point[i]], categories=df_categories[column]))
+            i = i + 1
+        instance['cluster'] = pd.Series(pd.Categorical([p_c], categories=clusters_names))
+        x = math.exp(red.logl(instance)[0])
+
+        lklh.append(x)
+    t = sum(lklh)
+    prob_posteriors = [x / t for x in lklh]
+
+    return prob_posteriors
+
+#Distancia de Hellinger para distribuciones discretas
+def hellinger_distance(p,q):
+    d=0
+    for i in range(len(p)):
+        d=d+(math.sqrt(p[i])-math.sqrt(q[i]))**2
+    return math.sqrt(d)/math.sqrt(2)
+
+
+
+
+def ev_probability(bn, instances,cluster_names,df_categories, n=1000):  #Esta función utiliza likelihood weighting para obtener P(e)
+    evidence = list(instances.keys())
+    evidence_value = instances.copy()
+
+    w = 0 #a esta variable se el irán sumando los pesos w a medida que se calculen
+
+    ancestral_order = pb.Dag(bn.nodes(), bn.arcs()).topological_sort()
+
+    for i in range(n): #obtenemos la muestra para calcular P(e)
+        sample = evidence_value.copy()
+        for var in ancestral_order:
+            if bn.num_parents(var) == 0: #Con esto fijamos que la variable sea la variable cluster la cual es la única sin padres y sampleamos
+                sample[var] = numpy.random.choice(cluster_names, 1,
+                                                     p=from_CPT_to_df(str(bn.cpd('cluster'))).iloc[0].tolist())[0]
+            else: #sampleamos de aquellas variables que no estén en la evidencia
+                if var not in evidence_value.keys():
+                    prob = from_CPT_to_df(str(bn.cpd(var)))
+                    for element in bn.parents(var):
+                        prob = prob.loc[prob[element] == itemgetter(element)(sample)]
+                        prob = prob.drop(element, axis=1)
+                    cat = prob.columns
+                    prob = prob.iloc[0].tolist()
+                    prob = [float(x) for x in prob]
+                    t = sum(prob)
+                    sample[var] = numpy.random.choice(cat, 1,
+                                                         p=[x / t for x in prob])[0]
+
+
+        loglikelihood = 1
+        for ev in evidence: #obtenemos el peso w para el sample obtenido que queda definido en la variable loglikelihood y se lo sumamos a w
+            parents = pd.DataFrame(columns=list(bn.parents(ev)))
+            parents[ev] = pd.Series(pd.Categorical([itemgetter(ev)(sample)], categories=df_categories[ev]))
+            for element in bn.parents(ev):
+                parents[element] = pd.Series(pd.Categorical([itemgetter(element)(sample)], categories=df_categories[element]))
+            x = bn.cpd(ev).logl(parents)
+
+            loglikelihood = loglikelihood * math.exp(x[0])
+
+        w = w + loglikelihood
+
+    if w == 0:
+
+        return 0
+    else:
+        evidence_probability = w / n
+        return evidence_probability
+
+
+
+def importance_1(red,point,df_categories,clusters_names):  #importancia de la variable a través de variación de la propia variable
+                                                           #point en orden ancestral
+
+    variables = red.nodes()
+    variables.remove('cluster')
+    prob_posterior_map = posterior_probability(red, clusters_names, df_categories, point)#calculamos P(C | MAP)
+
+    ancestral_order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
+    ancestral_order.remove('cluster')
+
+    importance = {}
+    for k in range(len(ancestral_order)): #calculamos la importancia para cada variable.
+        distances = []
+        var = ancestral_order[k]
+        instances = {}
+        lista = red.nodes()
+        lista.remove('cluster')
+        lista.remove(var)
+        for variable in lista:
+            instances[variable] = point[ancestral_order.index(variable)]
+
+        e_prob = ev_probability(red, instances, clusters_names,df_categories) #Como P(X_i | X_(-i))=P(X_i,X_(-i))/P(X_(-i)) calculamos P(X_(-i))
+        for category in df_categories[var]: #Ahora para cada categoría obtenemos de la variable de interes sustuimos su valor en el MAP y calculamos P(C|X) para calcular la distancia
+            #respecto de P(C| MAP)
+            if point[k] != category:
+                evidence = point.copy()
+                evidence[k] = category
+                lklh = []
+                for p_c in clusters_names:
+
+                    instance = pd.DataFrame(columns=ancestral_order)
+                    i = 0
+                    for column in instance.columns:
+                        instance[column] = pd.Series(pd.Categorical([evidence[i]], categories=df_categories[column]))
+                        i = i + 1
+
+                    instance['cluster'] = pd.Series(pd.Categorical([p_c], categories=clusters_names))
+                    x = math.exp(red.logl(instance)[0])
+
+                    lklh.append(x)
+
+                t = sum(lklh)
+                prob_posterior = [x / t for x in lklh]
+
+                d = hellinger_distance(prob_posterior_map, prob_posterior)
+
+
+                #Ahora calculamos P(X_i,X_(-i)) y multiplicamos la distancia por dicho valor. Deberiamos dividir también por P(X_(-i)) pero como es un valor fijo
+                #para todas las categorías lo añadimos posteriormente
+
+
+                probability = 0
+                for p_c in clusters_names:
+                    data=pd.DataFrame()
+                    for instance in instances.keys():
+                        data[instance]=pd.Series(pd.Categorical([instances[instance]],categories=df_categories[instance]))
+                    data[var]=pd.Series(pd.Categorical([category],categories=df_categories[var]))
+                    data['cluster']=pd.Series(pd.Categorical([p_c],categories=clusters_names))
+
+                    probability=probability+math.exp(red.logl(data)[0])
+
+                distances.append(d * probability)
+
+
+
+        importance[var] = mean(distances)/e_prob
+    return importance
+
+
+
+
+
+
+
+
