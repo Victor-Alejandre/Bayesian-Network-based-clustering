@@ -20,7 +20,7 @@ np.seterr(divide='ignore', invalid='ignore')
 
 
 #Cargamos la red y los datos
-customers_red=pb.load("best_network_customers_2.pickle")
+customers_red=pb.load(r"networks\best_network_customers_2.pickle")
 dataframe=pd.read_csv(r'C:\Users\Victor Alejandre\Desktop\CIG\Implementación\customers.csv')
 dataframe=dataframe.drop('ID',axis=1)
 #Preprocesado de los datos donde convertimos en categórica la variables continuas income y age

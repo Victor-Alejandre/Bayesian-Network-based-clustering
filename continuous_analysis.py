@@ -21,7 +21,7 @@ np.seterr(divide='ignore', invalid='ignore')
 
 
 #Cargamos los datos
-best = pb.load("best_network.pickle")
+best = pb.load(r"networks\best_network.pickle")
 
 df=pd.read_csv(r'C:\Users\Victor Alejandre\Desktop\CIG\Implementación\example.csv')
 df=df.drop('color',axis=1)
