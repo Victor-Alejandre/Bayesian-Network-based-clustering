@@ -1,4 +1,4 @@
-# cluster_intrepretability
+# Bayesian-Network-based-clustering
 In this repository we find the code developed for the master's thesis "Interpreting Bayesian Network-based Clustering".
 Code for solving the clustering problem with Bayesian Networks (BN) for categorical data is founded. discrete_structure.py contains all the functions needed for such purpose, whereas customers.py is an applied example on how to use these functions for obtaining the desired BN for the customers dataset. This dataset can be found in the dataset folder, we also find in the network folder the learnt BN best_network_customers_2.pickle .
 
