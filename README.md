@@ -5,7 +5,7 @@ Code for solving the clustering problem with Bayesian Networks (BN) for categori
 Code for analyzing the respective BNs obtained is implemented in discrete_analysis_hellinger.py and discrete_representation.py . In these files we find the functions implementing the methodology developed in the thesis for cluster characterization in order to solve cluster labeling. Finally, customers_analysis.py contains an example on how to apply these functions for the network obtained in customers.py .
 
 
-Moreover, continuous_structure.py and continuous_analysis.py are files were the proposed methodology and structure learning are adapted for a particular continuous case presented in the thesis with dataset example (dataset folder). This can be applied to others datasets but for problems with external libraries it may not work. 
+Moreover, continuous_structure.py and continuous_analysis.py are files where the proposed methodology and structure learning are adapted for a particular continuous case presented in the thesis with dataset example (dataset folder). This can be applied to others datasets but for problems with external libraries it may not work. 
 
 
 Finally, gbf_example.py contains code for a particular example of the thesis and pybnesianCPT_to_df.py and radar_chart_discrete.py contain support functions needed for the implementations mentioned before.
