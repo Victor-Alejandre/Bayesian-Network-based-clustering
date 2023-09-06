@@ -8,4 +8,4 @@ Code for analyzing the respective BNs obtained is implemented in discrete_analys
 Moreover, continuous_structure.py and continuous_analysis.py are files where the proposed methodology and structure learning are adapted for a particular continuous case presented in the thesis with dataset example (dataset folder). This can be applied to others datasets but for problems with external libraries it may not work. 
 
 
-Finally, gbf_example.py contains code for a particular example of the thesis and pybnesianCPT_to_df.py and radar_chart_discrete.py contain support functions needed for the implementations mentioned before.
+Finally, gbf_example.py contains code for a particular example of the thesis and pybnesianCPT_to_df.py with radar_chart_discrete.py contain support functions needed for the implementations mentioned before.
