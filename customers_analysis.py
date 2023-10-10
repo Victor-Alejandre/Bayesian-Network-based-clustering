@@ -66,10 +66,19 @@ clusters=[]
 for i in range(1,n_clusters+1):
     clusters.append('c'+f'{i}')
 
+#Generamos el diccionario con las categorias codificadas en nº enteros para su posterior en el radar_chart
+df_categories=discrete_analysis_hellinger.df_to_dict(dataframe)
+#En particular para las variables categoricas de income y age como son ordinales establecemos el diccionario a mano para que se respete este orden en el display del radar chart
+df_categories['Income']={'Low income':1,'Middle income':2,'High income':3}
+df_categories['Age']={'Junior':1,'Adult':2,'Senior citizen':3}
+
+
 #Necesitamos los posibles valores de cada variable para trabajar con los algoritmos implementados, estos deben ir en un diccionaro {variable: [categorias]}
 categories={'cluster':clusters}
 for var in dataframe.columns:
     categories[var]=dataframe[var].cat.categories.tolist()
+
+
 
 #Obtenemos los representantes con las respectivas prob condicionales respecto al cluster de cada valor que toma cada variable de los representantes.
 #Para el probabilistic logic sampling seleccionamos un tamaño de muestra de 100000
@@ -82,16 +91,24 @@ for column in maps.columns:
     maps_values[column]=[x[0] for x in maps[column]]
 
 
+
+
 #Obtenemos las importancias
 importances_1={}
 for cluster in clusters:
     x=maps_values.loc[[cluster]].values.tolist()[0]
-    print(x)
     importances=dict(sorted(discrete_analysis_hellinger.importance_1(customers_red,x,categories,clusters).items(), key=lambda x:x[1],reverse=True))
     importances_1[cluster]=importances
 
+
+
+
+#Construimos el Radar Chart con los representantes las importancias sin las probabilidades condicionadas
+discrete_analysis_hellinger.naming_categories(maps_values,importances_1,df_categories)
+
 #Construimos el Radar Chart con los representantes las importancias y las probabilidades condicionadas
 discrete_analysis_hellinger.naming(maps,importances_1,customers_red)
+
 #Obtenemos la representación de la red para cada cluster con los nodos coloreados según las importancias de cada variable para el representante calculado
 clusters_dag(customers_red,importances_1,clusters)
 

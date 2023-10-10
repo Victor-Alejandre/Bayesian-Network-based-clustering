@@ -8,6 +8,7 @@ import sklearn
 import pybnesianCPT_to_df
 from operator import itemgetter
 from radar_chart_discrete import ComplexRadar
+import radar_chart_discrete_categories
 import math
 import matplotlib.pyplot as plt
 import numpy as np
@@ -66,7 +67,7 @@ def get_MAP(red,clusters_names,n=200000): #Esta función nos devuelve el map dad
             var=variables[i]
             p=sample_c.loc[sample_c[var]==map[i]][var].tolist().count(map[i])/sample_c.shape[0]
             map[i]=(map[i],p)
-        print(map)
+
         MAP[clusters_names[k]] = map
 
     MAP = MAP.set_index(np.array(variables))
@@ -106,6 +107,64 @@ def naming(dataframe_map, importance,red): #Esta función nos devuelve el Radar 
 
     plt.show()
 
+def get_MAP_simple(red,clusters_names,n=200000): #esta función es exactamente igual que get_MAP pero en este caso no calculamos las probabilidades P(valor MAP variable | C)
+                                                #de esta forma solo obtenemos los representantes en un Dataframe
+    MAP = pd.DataFrame()
+    sample=joint_sampling(red,clusters_names,n)
+
+    variables = pb.Dag(red.nodes(), red.arcs()).topological_sort()
+    variables.remove('cluster')
+    for k in range(len(clusters_names)):
+        sample_c=sample.loc[sample['cluster']==clusters_names[k]]
+        sample_c=sample_c.drop('cluster',axis=1)
+        dict=sample_c.value_counts().to_dict()
+        map=list(max(dict, key=dict.get))
+        MAP[clusters_names[k]] = map
+
+    MAP = MAP.set_index(np.array(variables))
+    print(MAP)
+
+    plot = MAP.T
+    return plot
+
+def df_to_dict(dataframe):  #con esta función obtenemos un diccionario que para cada variable contiene un diccionario con la codificación de las categorias en nº enteros
+                            #como por ejemplo {fruta:{manzana:0,pera:1}}. Esta codificacion de las variables es necesaria para la funcion de naming_discrete que nos
+                            #devuelve un radar chart con los valores que toma cada uno de los representantes.
+    initial_dict={}
+    for var in dataframe.columns:
+        traductor={}
+        categories=dataframe[var].unique().tolist()
+        categories.sort()
+        for i, category in enumerate(categories):
+            traductor[category]=i+1
+        initial_dict[var]=traductor
+    dictionary=dict(sorted(initial_dict.items(), key=lambda item: len(list(item[1].values())),reverse=True))
+
+    return dictionary
+
+
+
+def naming_categories(dataframe_map, importance,df_categories): #Esta funcion cumple el mismo cometido que la funcion naming a diferencia de que en este caso el radar chart
+                                                                #mostrado enseña los valores que toma cada representante en vez de P(valor MAP variable | C)
+                                                                #es por ello que necesitamos como input las categorias de las variables codificadas (df_categories)
+
+    fig1 = plt.figure(figsize=(10, 10))
+    radar = radar_chart_discrete_categories.ComplexRadar(fig1, df_categories, show_scales=True)
+
+
+    for g in dataframe_map.index:
+        info = f"cluster {g}"
+        for var in importance[g].keys():
+            info = info + f"\n {var, dataframe_map.loc[g][var]} importance {importance[g][var]}"
+        radar.plot(dataframe_map.loc[g], df_categories,label=info )
+        radar.fill(dataframe_map.loc[g], df_categories,alpha=0.5)
+
+    radar.set_title("MAP representative of each cluster")
+    radar.use_legend(loc='lower left', bbox_to_anchor=(0.3, 0, 1, 1), ncol=radar.plot_counter,
+                     bbox_transform=matplotlib.transforms.IdentityTransform())
+
+
+    plt.show()
 
 
 
